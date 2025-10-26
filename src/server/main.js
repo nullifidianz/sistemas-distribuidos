@@ -45,6 +45,7 @@ class ChatServer {
         this.setupReplication();
         this.registerWithReferenceServer();
         this.startHeartbeat();
+        this.startAutoSave(); // Iniciar salvamento automático
     }
 
     async loadData() {
@@ -85,17 +86,21 @@ class ChatServer {
 
     async saveData() {
         try {
-            // Salvar usuários
-            await fs.writeFile('users.json', JSON.stringify(Array.from(this.users.entries())));
+            // Salvar usuários com formatação legível
+            const usersArray = Array.from(this.users.entries());
+            await fs.writeFile('users.json', JSON.stringify(usersArray, null, 2));
             
-            // Salvar canais
-            await fs.writeFile('channels.json', JSON.stringify(Array.from(this.channels)));
+            // Salvar canais com formatação legível
+            const channelsArray = Array.from(this.channels);
+            await fs.writeFile('channels.json', JSON.stringify(channelsArray, null, 2));
             
-            // Salvar mensagens
-            await fs.writeFile('messages.json', JSON.stringify(this.messages));
+            // Salvar mensagens com formatação legível
+            await fs.writeFile('messages.json', JSON.stringify(this.messages, null, 2));
             
-            // Salvar publicações
-            await fs.writeFile('publications.json', JSON.stringify(this.publications));
+            // Salvar publicações com formatação legível
+            await fs.writeFile('publications.json', JSON.stringify(this.publications, null, 2));
+            
+            console.log(`Persistência: ${this.users.size} users, ${this.channels.size} channels, ${this.messages.length} messages, ${this.publications.length} publications`);
         } catch (error) {
             console.error('Erro ao salvar dados:', error);
         }
@@ -182,23 +187,41 @@ class ChatServer {
 
     async registerWithReferenceServer() {
         try {
-            // Solicitar rank
-            const rankRequest = {
-                service: 'rank',
-                data: {
-                    user: this.serverName,
-                    timestamp: Date.now(),
-                    clock: this.incrementClock()
-                }
-            };
-            
-            this.refSocket.send(msgpack.encode(rankRequest));
-            const rankResponse = msgpack.decode(await this.refSocket.receive());
-            
-            if (rankResponse.service === 'rank' && rankResponse.data.rank) {
-                this.rank = rankResponse.data.rank;
-                console.log(`Servidor '${this.serverName}' recebeu rank: ${this.rank}`);
-            }
+            await new Promise((resolve, reject) => {
+                // Solicitar rank
+                const rankRequest = {
+                    service: 'rank',
+                    data: {
+                        user: this.serverName,
+                        timestamp: Date.now(),
+                        clock: this.incrementClock()
+                    }
+                };
+                
+                // Enviar requisição
+                this.refSocket.send(msgpack.encode(rankRequest));
+                
+                // Listener para receber resposta
+                const messageHandler = (data) => {
+                    try {
+                        const rankResponse = msgpack.decode(data);
+                        
+                        if (rankResponse.service === 'rank' && rankResponse.data.rank) {
+                            this.rank = rankResponse.data.rank;
+                            console.log(`Servidor '${this.serverName}' recebeu rank: ${this.rank}`);
+                        }
+                        
+                        // Remover listener temporário
+                        this.refSocket.removeListener('message', messageHandler);
+                        resolve();
+                    } catch (error) {
+                        this.refSocket.removeListener('message', messageHandler);
+                        reject(error);
+                    }
+                };
+                
+                this.refSocket.on('message', messageHandler);
+            });
             
             // Solicitar lista de servidores
             await this.updateServerList();
@@ -210,16 +233,31 @@ class ChatServer {
     
     async updateServerList() {
         try {
-            const listRequest = {
-                service: 'list',
-                data: {
-                    timestamp: Date.now(),
-                    clock: this.incrementClock()
-                }
-            };
-            
-            this.refSocket.send(msgpack.encode(listRequest));
-            const listResponse = msgpack.decode(await this.refSocket.receive());
+            const listResponse = await new Promise((resolve, reject) => {
+                const listRequest = {
+                    service: 'list',
+                    data: {
+                        timestamp: Date.now(),
+                        clock: this.incrementClock()
+                    }
+                };
+                
+                this.refSocket.send(msgpack.encode(listRequest));
+                
+                // Listener para receber resposta
+                const messageHandler = (data) => {
+                    try {
+                        const response = msgpack.decode(data);
+                        this.refSocket.removeListener('message', messageHandler);
+                        resolve(response);
+                    } catch (error) {
+                        this.refSocket.removeListener('message', messageHandler);
+                        reject(error);
+                    }
+                };
+                
+                this.refSocket.on('message', messageHandler);
+            });
             
             if (listResponse.service === 'list' && listResponse.data.list) {
                 this.knownServers.clear();
@@ -253,17 +291,25 @@ class ChatServer {
     startHeartbeat() {
         setInterval(async () => {
             try {
-                const heartbeatRequest = {
-                    service: 'heartbeat',
-                    data: {
-                        user: this.serverName,
-                        timestamp: Date.now(),
-                        clock: this.incrementClock()
-                    }
-                };
-                
-                this.refSocket.send(msgpack.encode(heartbeatRequest));
-                await this.refSocket.receive(); // Aguardar resposta
+                await new Promise((resolve, reject) => {
+                    const heartbeatRequest = {
+                        service: 'heartbeat',
+                        data: {
+                            user: this.serverName,
+                            timestamp: Date.now(),
+                            clock: this.incrementClock()
+                        }
+                    };
+                    
+                    this.refSocket.send(msgpack.encode(heartbeatRequest));
+                    
+                    const messageHandler = (data) => {
+                        this.refSocket.removeListener('message', messageHandler);
+                        resolve();
+                    };
+                    
+                    this.refSocket.on('message', messageHandler);
+                });
                 
                 // Atualizar lista de servidores periodicamente
                 await this.updateServerList();
@@ -272,6 +318,18 @@ class ChatServer {
                 console.error('Erro no heartbeat:', error);
             }
         }, 15000); // Heartbeat a cada 15 segundos
+    }
+    
+    startAutoSave() {
+        // Salvar dados automaticamente a cada 30 segundos
+        setInterval(async () => {
+            try {
+                await this.saveData();
+                console.log('Dados salvos automaticamente');
+            } catch (error) {
+                console.error('Erro ao salvar dados automaticamente:', error);
+            }
+        }, 30000); // A cada 30 segundos
     }
     
     async syncPhysicalClock() {
@@ -341,10 +399,12 @@ class ChatServer {
             };
         }
 
-        // Registrar usuário
+        // Registrar usuário com timestamp completo
         this.users.set(user, {
+            user: user,
             loginTime: timestamp,
-            lastSeen: Date.now()
+            lastSeen: Date.now(),
+            createdAt: timestamp
         });
 
         // Se somos primary, replicar para backups
@@ -614,7 +674,20 @@ class ChatServer {
                 backupSocket.connect(`tcp://${backupName}:${this.replicationPort}`);
                 
                 backupSocket.send(msgpack.encode(replicationRequest));
-                const response = msgpack.decode(await backupSocket.receive());
+                
+                const response = await new Promise((resolve, reject) => {
+                    const messageHandler = (data) => {
+                        try {
+                            const decoded = msgpack.decode(data);
+                            backupSocket.removeListener('message', messageHandler);
+                            resolve(decoded);
+                        } catch (error) {
+                            backupSocket.removeListener('message', messageHandler);
+                            reject(error);
+                        }
+                    };
+                    backupSocket.on('message', messageHandler);
+                });
                 
                 backupSocket.close();
                 

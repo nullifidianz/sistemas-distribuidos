@@ -69,16 +69,3 @@ services:
     command: ["./bot"]
     deploy:
       replicas: 2
-
-  web:
-    build:
-      context: ../web
-      dockerfile: Dockerfile
-    image: cc7261:web
-    depends_on:
-      - broker
-      - server
-    ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
