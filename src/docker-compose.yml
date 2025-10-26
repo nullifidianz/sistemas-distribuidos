@@ -47,6 +47,8 @@ services:
       replicas: 3
     ports:
       - "5560-5562:5560"
+    volumes:
+      - ../server_data:/app/data
 
   client:
     build:

@@ -51,7 +51,7 @@ class ChatServer {
     async loadData() {
         try {
             // Carregar usuários
-            const usersData = await fs.readFile('users.json', 'utf8');
+            const usersData = await fs.readFile('data/users.json', 'utf8');
             const users = JSON.parse(usersData);
             this.users = new Map(users);
         } catch (error) {
@@ -60,7 +60,7 @@ class ChatServer {
 
         try {
             // Carregar canais
-            const channelsData = await fs.readFile('channels.json', 'utf8');
+            const channelsData = await fs.readFile('data/channels.json', 'utf8');
             const channels = JSON.parse(channelsData);
             this.channels = new Set(channels);
         } catch (error) {
@@ -69,7 +69,7 @@ class ChatServer {
 
         try {
             // Carregar mensagens
-            const messagesData = await fs.readFile('messages.json', 'utf8');
+            const messagesData = await fs.readFile('data/messages.json', 'utf8');
             this.messages = JSON.parse(messagesData);
         } catch (error) {
             console.log('Arquivo messages.json não encontrado, iniciando com dados vazios');
@@ -77,7 +77,7 @@ class ChatServer {
 
         try {
             // Carregar publicações
-            const publicationsData = await fs.readFile('publications.json', 'utf8');
+            const publicationsData = await fs.readFile('data/publications.json', 'utf8');
             this.publications = JSON.parse(publicationsData);
         } catch (error) {
             console.log('Arquivo publications.json não encontrado, iniciando com dados vazios');
@@ -86,19 +86,22 @@ class ChatServer {
 
     async saveData() {
         try {
+            // Garantir que a pasta data existe
+            await fs.mkdir('data', { recursive: true });
+            
             // Salvar usuários com formatação legível
             const usersArray = Array.from(this.users.entries());
-            await fs.writeFile('users.json', JSON.stringify(usersArray, null, 2));
+            await fs.writeFile('data/users.json', JSON.stringify(usersArray, null, 2));
             
             // Salvar canais com formatação legível
             const channelsArray = Array.from(this.channels);
-            await fs.writeFile('channels.json', JSON.stringify(channelsArray, null, 2));
+            await fs.writeFile('data/channels.json', JSON.stringify(channelsArray, null, 2));
             
             // Salvar mensagens com formatação legível
-            await fs.writeFile('messages.json', JSON.stringify(this.messages, null, 2));
+            await fs.writeFile('data/messages.json', JSON.stringify(this.messages, null, 2));
             
             // Salvar publicações com formatação legível
-            await fs.writeFile('publications.json', JSON.stringify(this.publications, null, 2));
+            await fs.writeFile('data/publications.json', JSON.stringify(this.publications, null, 2));
             
             console.log(`Persistência: ${this.users.size} users, ${this.channels.size} channels, ${this.messages.length} messages, ${this.publications.length} publications`);
         } catch (error) {

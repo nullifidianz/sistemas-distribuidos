@@ -1,2 +1,5 @@
 /BOT_FIXES.md
 /WEB_INTERFACE.md
+
+# Dados persistidos dos servidores
+src/server_data/
