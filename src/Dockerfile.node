@@ -1,0 +1,12 @@
+FROM node:18-alpine
+
+RUN apk add --no-cache python3 make g++ zeromq-dev zeromq pkgconfig
+
+WORKDIR /app
+
+COPY package.json ./
+RUN npm install zeromq --build-from-source
+
+COPY main.js .
+
+CMD ["node", "main.js"]

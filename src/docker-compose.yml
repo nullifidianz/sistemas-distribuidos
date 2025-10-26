@@ -1,0 +1,84 @@
+services:
+  broker:
+    build:
+      context: ./broker
+      dockerfile: ../Dockerfile.python
+    image: cc7261:broker
+    container_name: broker
+    volumes:
+      - ./broker:/app
+    ports:
+      - 5555:5555
+      - 5556:5556
+
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: ../Dockerfile.python
+    image: cc7261:proxy
+    container_name: proxy
+    volumes:
+      - ./proxy:/app
+    ports:
+      - 5557:5557
+      - 5558:5558
+
+  reference:
+    build:
+      context: ./reference
+      dockerfile: ../Dockerfile.python
+    image: cc7261:reference
+    container_name: reference
+    volumes:
+      - ./reference:/app
+    ports:
+      - 5559:5559
+
+  server:
+    build:
+      context: ./server
+      dockerfile: ../Dockerfile.node
+    image: cc7261:server
+    depends_on:
+      - broker
+      - proxy
+      - reference
+    deploy:
+      replicas: 3
+    ports:
+      - "5560-5562:5560"
+
+  client:
+    build:
+      context: ./client
+      dockerfile: ../Dockerfile.go
+    image: cc7261:client
+    stdin_open: true
+    tty: true
+    depends_on:
+      - server
+    command: ["./client"]
+
+  bot:
+    build:
+      context: ./client
+      dockerfile: ../Dockerfile.go
+    image: cc7261:bot
+    depends_on:
+      - server
+    command: ["./bot"]
+    deploy:
+      replicas: 2
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    image: cc7261:web
+    depends_on:
+      - broker
+      - server
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
